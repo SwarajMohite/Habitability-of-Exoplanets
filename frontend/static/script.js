@@ -1,6 +1,6 @@
 // script.js - UPDATED FOR LIVE SERVER
 // ========== CONFIGURATION ==========
-const FLASK_API = 'http://localhost:5000/api';  // Flask API endpoint
+const FLASK_API = 'https://backend-exo-9mu0.onrender.com';  // Flask API endpoint
 
 let currentParameters = {
     radius: 1.0,
@@ -337,4 +337,5 @@ document.addEventListener('DOMContentLoaded', function() {
 window.updateValue = updateValue;
 window.loadSampleData = loadSampleData;
 window.predictHabitability = predictHabitability;
+
 window.resetForm = resetForm;
