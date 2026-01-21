@@ -1,4 +1,4 @@
-// script.js - UPDATED FOR RENDER BACKEND (PRODUCTION READY)
+// script.js - SAFE & PRODUCTION READY
 // =======================================================
 
 // ========== CONFIGURATION ==========
@@ -19,21 +19,26 @@ function updateValue(id, value) {
     if (!valueSpan) return;
 
     const numValue = parseFloat(value);
-    valueSpan.textContent = numValue.toFixed(id === "temp" ? 0 : 1);
-    currentParameters[id] = numValue;
+    valueSpan.textContent = !isNaN(numValue) ? numValue.toFixed(id === "temp" ? 0 : 1) : "0";
+    currentParameters[id] = !isNaN(numValue) ? numValue : 0;
 
     updateComparisonDisplay();
 }
 
 function updateComparisonDisplay() {
-    document.getElementById("compRadius").textContent = currentParameters.radius.toFixed(1);
-    document.getElementById("compMass").textContent = currentParameters.mass.toFixed(1);
-    document.getElementById("compGravity").textContent = currentParameters.gravity.toFixed(1);
+    const compRadius = document.getElementById("compRadius");
+    const compMass = document.getElementById("compMass");
+    const compGravity = document.getElementById("compGravity");
+
+    if (compRadius) compRadius.textContent = currentParameters.radius.toFixed(1);
+    if (compMass) compMass.textContent = currentParameters.mass.toFixed(1);
+    if (compGravity) compGravity.textContent = currentParameters.gravity.toFixed(1);
 }
 
 // ========== SAMPLE DATA ==========
 function loadSampleData() {
-    const selected = document.getElementById("sampleSelect").value;
+    const selected = document.getElementById("sampleSelect")?.value;
+    if (!selected) return;
 
     const samples = {
         earth: { radius: 1.0, mass: 1.0, gravity: 1.0, period: 365.25, temp: 288, density: 5.51 },
@@ -51,8 +56,8 @@ function loadSampleData() {
         const valueSpan = document.getElementById(`${key}Value`);
         if (slider && valueSpan) {
             slider.value = sample[key];
-            valueSpan.textContent = sample[key].toFixed(key === "temp" ? 0 : 1);
-            currentParameters[key] = sample[key];
+            valueSpan.textContent = !isNaN(sample[key]) ? sample[key].toFixed(key === "temp" ? 0 : 1) : "0";
+            currentParameters[key] = !isNaN(sample[key]) ? sample[key] : 0;
         }
     });
 
@@ -62,11 +67,14 @@ function loadSampleData() {
 // ========== API CALL ==========
 async function predictHabitability() {
     const btn = document.querySelector(".btn-primary");
+    if (!btn) return;
+
     btn.disabled = true;
     btn.innerHTML = "Analyzing...";
 
     try {
         const payload = {
+            // Frontend names
             radius: currentParameters.radius,
             mass: currentParameters.mass,
             gravity: currentParameters.gravity,
@@ -74,7 +82,7 @@ async function predictHabitability() {
             temp: currentParameters.temp,
             density: currentParameters.density,
 
-            // model-compatible keys
+            // Model-compatible names
             P_RADIUS: currentParameters.radius,
             P_MASS: currentParameters.mass,
             P_GRAVITY: currentParameters.gravity,
@@ -85,56 +93,76 @@ async function predictHabitability() {
 
         const response = await fetch(`${FLASK_API}/api/predict`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            },
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
             body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`API error ${response.status}: ${err}`);
+            const errText = await response.text();
+            throw new Error(`API error ${response.status}: ${errText}`);
         }
 
         const result = await response.json();
         updatePredictionDisplay(result);
-        showNotification("Prediction successful", "success");
+        showNotification("✅ Prediction successful", "success");
 
     } catch (error) {
-        console.error(error);
-        showNotification(error.message, "error");
+        console.error("Prediction error:", error);
+        showNotification(error.message || "Prediction failed", "error");
     } finally {
         btn.disabled = false;
-        btn.innerHTML = "Predict Habitability";
+        btn.innerHTML = '<i class="fas fa-bolt"></i> Predict Habitability';
     }
 }
 
 // ========== UI UPDATES ==========
 function updatePredictionDisplay(result) {
-    document.getElementById("scoreValue").textContent = result.probability.toFixed(1);
-    document.getElementById("habitabilityLabel").textContent = result.prediction_label;
-    document.getElementById("habitabilityDescription").textContent =
-        `${result.prediction_label} (${result.confidence})`;
+    const probability = Number(result?.probability ?? 0);
+    const predictionLabel = result?.prediction_label ?? "Unknown";
+    const confidence = result?.confidence ?? "--";
+    const modelUsed = result?.model_used ?? "--";
+    const earthSimilarity = result?.earth_similarity ?? "--";
+    const probabilities = result?.probabilities ?? {
+        Non_Habitable: 0,
+        Potentially_Habitable: 0,
+        Highly_Habitable: 0
+    };
 
-    document.getElementById("confidenceValue").textContent = result.confidence;
-    document.getElementById("modelUsed").textContent = result.model_used;
-    document.getElementById("earthSimilarity").textContent = `${result.earth_similarity}%`;
+    const scoreEl = document.getElementById("scoreValue");
+    if (scoreEl) scoreEl.textContent = probability.toFixed(1);
 
-    updateProbabilityBars(result.probabilities);
-    drawScoreWheel(result.probability);
+    const labelEl = document.getElementById("habitabilityLabel");
+    if (labelEl) labelEl.textContent = predictionLabel;
+
+    const descEl = document.getElementById("habitabilityDescription");
+    if (descEl) descEl.textContent = `${predictionLabel} (${confidence} confidence)`;
+
+    const confEl = document.getElementById("confidenceValue");
+    if (confEl) confEl.textContent = confidence;
+
+    const modelEl = document.getElementById("modelUsed");
+    if (modelEl) modelEl.textContent = modelUsed;
+
+    const earthEl = document.getElementById("earthSimilarity");
+    if (earthEl) earthEl.textContent = `${earthSimilarity}%`;
+
+    updateProbabilityBars(probabilities);
+    drawScoreWheel(probability);
 }
 
 function updateProbabilityBars(probabilities) {
-    const map = {
-        Non: probabilities.Non_Habitable,
-        Pot: probabilities.Potentially_Habitable,
-        High: probabilities.Highly_Habitable
+    const keysMap = {
+        Non: probabilities.Non_Habitable ?? 0,
+        Pot: probabilities.Potentially_Habitable ?? 0,
+        High: probabilities.Highly_Habitable ?? 0
     };
 
-    Object.keys(map).forEach(key => {
-        document.getElementById(`prob${key}`).textContent = `${map[key]}%`;
-        document.getElementById(`prob${key}Fill`).style.width = `${map[key]}%`;
+    Object.keys(keysMap).forEach(key => {
+        const val = keysMap[key];
+        const textEl = document.getElementById(`prob${key}`);
+        const fillEl = document.getElementById(`prob${key}Fill`);
+        if (textEl) textEl.textContent = `${val}%`;
+        if (fillEl) fillEl.style.width = `${val}%`;
     });
 }
 
@@ -144,53 +172,73 @@ function drawScoreWheel(score) {
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const center = canvas.width / 2;
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
     const radius = 80;
 
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Background circle
     ctx.beginPath();
-    ctx.arc(center, center, radius, 0, 2 * Math.PI);
-    ctx.strokeStyle = "#ddd";
+    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(200,200,200,0.3)";
     ctx.lineWidth = 12;
     ctx.stroke();
 
+    // Progress
     ctx.beginPath();
-    ctx.arc(center, center, radius, -Math.PI / 2, -Math.PI / 2 + (score / 100) * 2 * Math.PI);
-    ctx.strokeStyle = score < 33 ? "#ff6b6b" : score < 66 ? "#feca57" : "#1dd1a1";
+    const startAngle = -Math.PI / 2;
+    const endAngle = startAngle + (score / 100) * 2 * Math.PI;
+    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+
+    // Gradient
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+    if (score < 33) {
+        gradient.addColorStop(0, "#ff6b6b");
+        gradient.addColorStop(1, "#ffb347");
+    } else if (score < 66) {
+        gradient.addColorStop(0, "#ffb347");
+        gradient.addColorStop(1, "#00d4aa");
+    } else {
+        gradient.addColorStop(0, "#00d4aa");
+        gradient.addColorStop(1, "#4a90e2");
+    }
+    ctx.strokeStyle = gradient;
     ctx.lineWidth = 12;
+    ctx.lineCap = "round";
     ctx.stroke();
 }
 
-// ========== NOTIFICATION ==========
-function showNotification(msg, type = "info") {
+// ========== NOTIFICATIONS ==========
+function showNotification(message, type = "info") {
     const n = document.createElement("div");
-    n.className = `notification ${type}`;
-    n.textContent = msg;
+    n.className = `notification notification-${type}`;
+    n.innerHTML = message;
     document.body.appendChild(n);
     setTimeout(() => n.remove(), 4000);
 }
 
-// ========== INIT ==========
+// ========== INITIALIZATION ==========
 document.addEventListener("DOMContentLoaded", () => {
     drawScoreWheel(0);
+    updateComparisonDisplay();
 
     // Health check
     fetch(`${FLASK_API}/api/health`)
         .then(res => res.json())
         .then(data => {
             if (data.model_loaded) {
-                showNotification("Backend connected successfully", "success");
+                showNotification("✅ Backend connected!", "success");
             } else {
-                showNotification("Backend running but model not loaded", "warning");
+                showNotification("⚠️ Backend running but model not loaded", "warning");
             }
         })
         .catch(() => {
-            showNotification("Cannot reach backend server", "error");
+            showNotification("❌ Cannot reach backend server", "error");
         });
 });
 
-// ========== GLOBAL EXPORTS ==========
+// ========== GLOBAL FUNCTIONS ==========
 window.updateValue = updateValue;
 window.loadSampleData = loadSampleData;
 window.predictHabitability = predictHabitability;
